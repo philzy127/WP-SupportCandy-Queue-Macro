@@ -2,6 +2,7 @@
 .dual-list-container {
     display: flex;
     gap: 20px;
+    align-items: center;
 }
 
 .dual-list-box {
@@ -16,15 +17,9 @@
     font-weight: 600;
 }
 
-.dual-list {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
 .dual-list select {
-    width: 250px;
-    height: 200px;
+    width: 375px;
+    height: 400px;
     border: 1px solid #ddd;
     border-radius: 4px;
     padding: 5px;
