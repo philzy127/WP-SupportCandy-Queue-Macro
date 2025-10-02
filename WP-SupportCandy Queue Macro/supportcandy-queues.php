@@ -13,6 +13,9 @@ class SupportCandyQueues {
     private $table_name = 'psmsc_tickets';
     private $status_table_name = 'psmsc_statuses';
     private $custom_fields_table_name = 'wpya_psmsc_custom_fields';
+    private $options_table_name = 'wpya_psmsc_options';
+    private $priorities_table_name = 'psmsc_priorities';
+    private $categories_table_name = 'psmsc_categories';
 
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -256,7 +259,7 @@ class SupportCandyQueues {
         $id_to_name_map = array();
 
         // Custom field options
-        $options_table = 'wpya_psmsc_options'; // hardcoded as it does not have the prefix
+        $options_table = $this->options_table_name;
         $options = $wpdb->get_results("SELECT id, name FROM {$options_table}");
         if ($options) {
             foreach ($options as $option) {
@@ -274,7 +277,7 @@ class SupportCandyQueues {
         }
 
         // Priorities
-        $priorities_table = $wpdb->prefix . 'psmsc_priorities';
+        $priorities_table = $wpdb->prefix . $this->priorities_table_name;
         $priority_options = $wpdb->get_results("SELECT id, name FROM {$priorities_table}");
         if ($priority_options) {
             foreach ($priority_options as $option) {
@@ -283,7 +286,7 @@ class SupportCandyQueues {
         }
 
         // Categories
-        $categories_table = $wpdb->prefix . 'psmsc_categories';
+        $categories_table = $wpdb->prefix . $this->categories_table_name;
         $category_options = $wpdb->get_results("SELECT id, name FROM {$categories_table}");
         if ($category_options) {
             foreach ($category_options as $option) {
