@@ -14,6 +14,7 @@ class SupportCandyQueues {
 
     private $table_name = 'psmsc_tickets'; // SupportCandy's ticket table name
     private $status_table_name = 'psmsc_statuses'; // SupportCandy's status table name
+    private $custom_fields_table_name = 'psmsc_custom_fields'; // SupportCandy's custom fields table
 
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -23,6 +24,7 @@ class SupportCandyQueues {
         register_activation_hook( __FILE__, array( $this, 'set_default_options' ) );
         register_uninstall_hook( __FILE__, array( 'SupportCandyQueues', 'uninstall' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+        add_action( 'wp_ajax_scq_test_queues', array( $this, 'test_queues_ajax_handler' ) );
     }
 
     public function load_textdomain() {
@@ -52,6 +54,10 @@ class SupportCandyQueues {
         if (strpos($hook,'scq_main') !== false) {
             wp_enqueue_script('scq-admin-js', plugin_dir_url(__FILE__).'admin.js', array('jquery'), null, true);
             wp_enqueue_style('scq-admin-css', plugin_dir_url(__FILE__).'admin.css');
+            wp_localize_script('scq-admin-js', 'scq_ajax', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce'    => wp_create_nonce('scq_test_queues_nonce')
+            ));
         }
     }
 
@@ -136,10 +142,40 @@ class SupportCandyQueues {
                 </div>
 
                 <h2><?php _e( 'Ticket Type Field', 'supportcandy-queues' ); ?></h2>
-                <input type="text" name="scq_ticket_type_field" value="<?php echo esc_attr($type_field); ?>" />
-                <p><?php _e( 'The field name in the ticket table that represents ticket type (default: category).', 'supportcandy-queues' ); ?></p>
+                <?php
+                // Get custom fields from SupportCandy's custom fields table
+                $custom_fields_table = $wpdb->prefix . $this->custom_fields_table_name;
+                $custom_fields = $wpdb->get_results("SELECT name, field_key FROM {$custom_fields_table}");
+
+                // Add default fields that can also be used
+                $default_fields = array(
+                    (object) array('field_key' => 'category', 'name' => __('Category', 'supportcandy-queues')),
+                    (object) array('field_key' => 'priority', 'name' => __('Priority', 'supportcandy-queues')),
+                    (object) array('field_key' => 'status', 'name' => __('Status', 'supportcandy-queues')),
+                );
+
+                $all_type_fields = array_merge($default_fields, $custom_fields ? $custom_fields : array());
+                ?>
+                <select name="scq_ticket_type_field">
+                    <?php
+                    foreach ($all_type_fields as $field) {
+                        echo '<option value="' . esc_attr($field->field_key) . '" ' . selected($type_field, $field->field_key, false) . '>' . esc_html($field->name) . '</option>';
+                    }
+                    ?>
+                </select>
+                <p><?php _e( 'The field in the ticket table that represents ticket type.', 'supportcandy-queues' ); ?></p>
 
                 <p><input type="submit" name="scq_save" class="button button-primary" value="<?php esc_attr_e( 'Save Settings', 'supportcandy-queues' ); ?>" /></p>
+
+                <h2><?php _e( 'Test Queue Counts', 'supportcandy-queues' ); ?></h2>
+                <p><?php _e( 'Click the button to see the current queue counts based on your saved settings.', 'supportcandy-queues' ); ?></p>
+                <p>
+                    <button type="button" id="scq_test_button" class="button"><?php _e( 'Run Test', 'supportcandy-queues' ); ?></button>
+                </p>
+                <div id="scq_test_results" style="display:none; border: 1px solid #ddd; padding: 10px; margin-top: 10px;">
+                    <h3><?php _e( 'Test Results', 'supportcandy-queues' ); ?></h3>
+                    <div id="scq_test_results_content"></div>
+                </div>
             </form>
         </div>
         <?php
@@ -184,7 +220,11 @@ class SupportCandyQueues {
         $statuses = get_option('scq_non_closed_statuses', array(1, 2));
 
         // Whitelist of allowed fields to prevent SQL injection.
-        $allowed_fields = array('category', 'priority', 'status');
+        $custom_fields_table = $wpdb->prefix . $this->custom_fields_table_name;
+        $custom_field_keys = $wpdb->get_col("SELECT field_key FROM {$custom_fields_table}");
+        $default_fields = array('category', 'priority', 'status');
+        $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
+
         if ( ! in_array( $type_field, $allowed_fields, true ) ) {
             if (get_option('scq_debug', 1)) {
                 error_log("[SCQ] Invalid ticket type field '{$type_field}' specified. Defaulting to 'category'.");
@@ -211,6 +251,48 @@ class SupportCandyQueues {
         }
 
         return $count;
+    }
+    public function test_queues_ajax_handler() {
+        check_ajax_referer('scq_test_queues_nonce', 'nonce');
+
+        global $wpdb;
+        $type_field = get_option('scq_ticket_type_field', 'category');
+        $statuses = get_option('scq_non_closed_statuses', array());
+
+        if (empty($statuses)) {
+            wp_send_json_error(__('No non-closed statuses are configured.', 'supportcandy-queues'));
+            return;
+        }
+
+        // Whitelist the type field to prevent SQL injection
+        $custom_fields_table = $wpdb->prefix . $this->custom_fields_table_name;
+        $custom_field_keys = $wpdb->get_col("SELECT field_key FROM {$custom_fields_table}");
+        $default_fields = array('category', 'priority', 'status');
+        $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
+
+        if ( ! in_array( $type_field, $allowed_fields, true ) ) {
+            wp_send_json_error(sprintf(__('Invalid ticket type field: %s', 'supportcandy-queues'), $type_field));
+            return;
+        }
+
+        $table = $wpdb->prefix . $this->table_name;
+
+        // Get all unique values for the selected ticket type field
+        $type_values = $wpdb->get_col($wpdb->prepare("SELECT DISTINCT %i FROM {$table}", $type_field));
+
+        $results = array();
+        $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
+
+        foreach ($type_values as $type_value) {
+            $sql = $wpdb->prepare(
+                "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders)",
+                array_merge(array($type_value), $statuses)
+            );
+            $count = $wpdb->get_var($sql);
+            $results[$type_value] = $count;
+        }
+
+        wp_send_json_success($results);
     }
 }
 
