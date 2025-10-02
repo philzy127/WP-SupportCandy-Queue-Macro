@@ -185,20 +185,10 @@ class SupportCandyQueues {
         if ($macro === 'queue_count') {
             global $wpdb;
 
-            if (get_option('scq_debug', 1)) {
-                error_log('[SCQ DEBUG] Starting replace_macro for ticket ID: ' . (isset($ticket->id) ? $ticket->id : 'N/A'));
-            }
-
             $type_field = get_option('scq_ticket_type_field', 'category');
             $statuses = get_option('scq_non_closed_statuses', array());
 
-            if (get_option('scq_debug', 1)) {
-                error_log('[SCQ DEBUG] Type Field: ' . $type_field);
-                error_log('[SCQ DEBUG] Statuses: ' . implode(', ', $statuses));
-                error_log('[SCQ DEBUG] Ticket Type Value: ' . (isset($ticket->$type_field) ? $ticket->$type_field : 'NOT SET'));
-            }
-
-            if (empty($type_field) || empty($statuses) || !isset($ticket->$type_field) || !isset($ticket->id)) {
+            if (empty($type_field) || empty($statuses) || !isset($ticket->id)) {
                 return str_replace('{{queue_count}}', '0', $str);
             }
 
@@ -213,7 +203,14 @@ class SupportCandyQueues {
             }
 
             $table = $wpdb->prefix . $this->table_name;
-            $type_value = $ticket->$type_field;
+
+            // Get the ticket type value directly from the database
+            $type_value = $wpdb->get_var($wpdb->prepare("SELECT `{$type_field}` FROM `{$table}` WHERE id = %d", $ticket->id));
+
+            if (is_null($type_value)) {
+                return str_replace('{{queue_count}}', '0', $str);
+            }
+
             $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
 
             // Exclude the current ticket from the count
@@ -221,11 +218,6 @@ class SupportCandyQueues {
                 "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders) AND `id` <> %d",
                 array_merge(array($type_value), $statuses, array($ticket->id))
             );
-
-            if (get_option('scq_debug', 1)) {
-                error_log('[SCQ DEBUG] SQL Query: ' . $sql);
-            }
-
             $count = $wpdb->get_var($sql);
 
             $str = str_replace('{{queue_count}}', $count, $str);
