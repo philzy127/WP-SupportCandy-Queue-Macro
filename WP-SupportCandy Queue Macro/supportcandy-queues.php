@@ -99,7 +99,7 @@ class SupportCandyQueues {
         ?>
         <div class="wrap">
             <h1><?php _e('SupportCandy Queues Settings', 'supportcandy-queues'); ?></h1>
-            <form method="post">
+            <form method="post" id="scq_settings_form">
                 <?php wp_nonce_field('scq_save_settings'); ?>
 
                 <h2><?php _e('Non-Closed Statuses', 'supportcandy-queues'); ?></h2>

@@ -11,7 +11,7 @@ jQuery(document).ready(function($){
     });
 
     // Before submitting the form, select all items in the 'selected' list
-    $('form').submit(function() {
+    $('#scq_settings_form').submit(function() {
         $('#selected_statuses option').prop('selected', true);
     });
 });
