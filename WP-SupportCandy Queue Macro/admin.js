@@ -9,4 +9,9 @@ jQuery(document).ready(function($){
             $(this).remove().appendTo('#available_statuses');
         });
     });
+
+    // Before submitting the form, select all items in the 'selected' list
+    $('form').submit(function() {
+        $('#selected_statuses option').prop('selected', true);
+    });
 });
