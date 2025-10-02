@@ -1,17 +1,43 @@
+/* Dual List Box Styles */
+.dual-list-container {
+    display: flex;
+    gap: 20px;
+}
+
+.dual-list-box {
+    display: flex;
+    flex-direction: column;
+}
+
+.dual-list-box h3 {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
 .dual-list {
     display: flex;
     align-items: center;
     gap: 10px;
 }
+
 .dual-list select {
-    width: 150px;
-    height: 150px;
+    width: 250px;
+    height: 200px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px;
 }
+
 .dual-buttons {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 10px;
+    align-items: center;
 }
+
 .dual-buttons button {
-    width: 50px;
+    width: 80px;
+    cursor: pointer;
 }

@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 class SupportCandyQueues {
 
     private $table_name = 'psmsc_tickets'; // SupportCandy's ticket table name
+    private $status_table_name = 'psmsc_statuses'; // SupportCandy's status table name
 
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -91,10 +92,22 @@ class SupportCandyQueues {
         $selected_statuses = get_option('scq_non_closed_statuses', array());
         $type_field = get_option('scq_ticket_type_field','category');
 
-        // Get all unique statuses in the ticket table
-        $table = $wpdb->prefix . $this->table_name;
-        $all_statuses = $wpdb->get_col("SELECT DISTINCT status FROM {$table} ORDER BY status ASC");
-        $available_statuses = array_diff($all_statuses, $selected_statuses);
+        // Get all statuses from SupportCandy's status table
+        $status_table = $wpdb->prefix . $this->status_table_name;
+        $all_statuses = $wpdb->get_results("SELECT id, name FROM {$status_table} ORDER BY name ASC");
+
+        $available_statuses_map = array();
+        $selected_statuses_map = array();
+
+        if ($all_statuses) {
+            foreach ($all_statuses as $status) {
+                if (in_array($status->id, $selected_statuses)) {
+                    $selected_statuses_map[$status->id] = $status->name;
+                } else {
+                    $available_statuses_map[$status->id] = $status->name;
+                }
+            }
+        }
         ?>
         <div class="wrap">
             <h1><?php _e( 'SupportCandy Queues Settings', 'supportcandy-queues' ); ?></h1>
@@ -103,17 +116,23 @@ class SupportCandyQueues {
 
                 <h2><?php _e( 'Non-Closed Statuses', 'supportcandy-queues' ); ?></h2>
                 <p><?php _e( 'Select which ticket statuses should count toward the queue:', 'supportcandy-queues' ); ?></p>
-                <div class="dual-list">
-                    <select multiple id="available_statuses">
-                        <?php foreach($available_statuses as $s) echo "<option value='{$s}'>$s</option>"; ?>
-                    </select>
+                <div class="dual-list-container">
+                    <div class="dual-list-box">
+                        <h3><?php _e( 'Available Statuses', 'supportcandy-queues' ); ?></h3>
+                        <select multiple id="available_statuses">
+                            <?php foreach($available_statuses_map as $id => $name) echo '<option value="' . esc_attr($id) . '">' . esc_html($name) . '</option>'; ?>
+                        </select>
+                    </div>
                     <div class="dual-buttons">
                         <button type="button" id="add_status"><?php _e( '→ Add', 'supportcandy-queues' ); ?></button>
                         <button type="button" id="remove_status"><?php _e( '← Remove', 'supportcandy-queues' ); ?></button>
                     </div>
-                    <select multiple name="scq_non_closed_statuses[]" id="selected_statuses">
-                        <?php foreach($selected_statuses as $s) echo "<option value='{$s}'>$s</option>"; ?>
-                    </select>
+                    <div class="dual-list-box">
+                        <h3><?php _e( 'Selected Statuses', 'supportcandy-queues' ); ?></h3>
+                        <select multiple name="scq_non_closed_statuses[]" id="selected_statuses">
+                            <?php foreach($selected_statuses_map as $id => $name) echo '<option value="' . esc_attr($id) . '">' . esc_html($name) . '</option>'; ?>
+                        </select>
+                    </div>
                 </div>
 
                 <h2><?php _e( 'Ticket Type Field', 'supportcandy-queues' ); ?></h2>
