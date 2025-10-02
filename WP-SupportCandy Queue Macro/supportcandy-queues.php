@@ -2,7 +2,7 @@
 /**
  * Plugin Name: SupportCandy Queues
  * Description: Adds a real-time queue count macro to SupportCandy emails with configurable non-closed statuses.
- * Version: 2.0
+ * Version: 3.0
  * Author: Your Name
  */
 
@@ -21,27 +21,18 @@ class SupportCandyQueues {
         add_action( 'init', array( $this, 'load_textdomain' ) );
         add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-        register_activation_hook( __FILE__, array( $this, 'set_default_options' ) );
-        register_uninstall_hook( __FILE__, array( 'SupportCandyQueues', 'uninstall' ) );
 
-        // Correct hooks for adding and replacing macros
-        add_filter( 'wpsc_macros', array( $this, 'register_macro' ) );
-        add_filter( 'wpsc_replace_macros', array( $this, 'replace_macro' ), 10, 3 );
+        register_activation_hook( __FILE__, array( $this, 'activate' ) );
+        register_deactivation_hook( __FILE__, array( 'SupportCandyQueues', 'uninstall' ) );
 
         add_action( 'wp_ajax_scq_test_queues', array( $this, 'test_queues_ajax_handler' ) );
+        add_action( 'wpsc_create_new_ticket', array( $this, 'update_queue_count_field' ), 10, 1 );
     }
 
-    public function load_textdomain() {
-        load_plugin_textdomain( 'supportcandy-queues', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-    }
+    public function activate() {
+        global $wpdb;
 
-    public static function uninstall() {
-        delete_option('scq_non_closed_statuses');
-        delete_option('scq_ticket_type_field');
-        delete_option('scq_debug');
-    }
-
-    public function set_default_options() {
+        // Set default options
         if ( get_option('scq_non_closed_statuses') === false ) {
             update_option('scq_non_closed_statuses', array(1, 2) );
         }
@@ -51,16 +42,54 @@ class SupportCandyQueues {
         if ( get_option('scq_debug') === false ) {
             update_option('scq_debug', 1);
         }
+
+        // Create the custom field for the queue count if it doesn't exist
+        $field_slug = 'scq_queue_count';
+        $field_exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$this->custom_fields_table_name} WHERE slug = %s", $field_slug));
+
+        if (!$field_exists) {
+            $wpdb->insert(
+                $this->custom_fields_table_name,
+                array(
+                    'name' => 'Queue Count',
+                    'slug' => $field_slug,
+                    'field' => 'ticket',
+                    'type' => 'cf_textfield',
+                    'allow_ticket_form' => 0, // Don't show on ticket form
+                    'allow_my_profile' => 0,
+                    'load_order' => 999
+                )
+            );
+            $field_id = $wpdb->insert_id;
+            update_option('scq_custom_field_id', $field_id);
+        }
+    }
+
+    public static function uninstall() {
+        global $wpdb;
+
+        // Delete the custom field created by this plugin
+        $field_id = get_option('scq_custom_field_id');
+        if ($field_id) {
+            $table_name = 'wpya_psmsc_custom_fields'; // Cannot use $this in static context
+            $wpdb->delete($table_name, array('id' => $field_id), array('%d'));
+        }
+
+        // Delete all plugin options
+        delete_option('scq_non_closed_statuses');
+        delete_option('scq_ticket_type_field');
+        delete_option('scq_debug');
+        delete_option('scq_custom_field_id');
+    }
+
+    public function load_textdomain() {
+        load_plugin_textdomain( 'supportcandy-queues', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
     }
 
     public function enqueue_scripts($hook) {
         if (strpos($hook, 'scq_main') !== false) {
             wp_enqueue_script('scq-admin-js', plugin_dir_url(__FILE__) . 'admin.js', array('jquery'), null, true);
             wp_enqueue_style('scq-admin-css', plugin_dir_url(__FILE__) . 'admin.css');
-            wp_localize_script('scq-admin-js', 'scq_ajax', array(
-                'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce'    => wp_create_nonce('scq_test_queues_nonce')
-            ));
         }
     }
 
@@ -151,6 +180,10 @@ class SupportCandyQueues {
                 </select>
                 <p><?php _e('The field in the ticket table that represents ticket type.', 'supportcandy-queues'); ?></p>
 
+                <h2><?php _e( 'Macro for Emails', 'supportcandy-queues' ); ?></h2>
+                <p><?php _e( 'This plugin has automatically created a custom field to store the queue count. Use the following macro in your SupportCandy email templates to display it:', 'supportcandy-queues' ); ?></p>
+                <p><code>{{ticket.scq_queue_count}}</code></p>
+
                 <p><input type="submit" name="scq_save" class="button button-primary" value="<?php esc_attr_e('Save Settings', 'supportcandy-queues'); ?>" /></p>
 
                 <h2><?php _e( 'Test Queue Counts', 'supportcandy-queues' ); ?></h2>
@@ -165,64 +198,6 @@ class SupportCandyQueues {
             </form>
         </div>
         <?php
-    }
-
-    /**
-     * Add custom macros to the list.
-     */
-    public function register_macro($macros) {
-        $macros[] = array(
-            'tag'   => '{{queue_count}}',
-            'title' => esc_attr__('Queue Count', 'supportcandy-queues'),
-        );
-        return $macros;
-    }
-
-    /**
-     * Replace custom macro tags with their values.
-     */
-    public function replace_macro($str, $ticket, $macro) {
-        if ($macro === 'queue_count') {
-            global $wpdb;
-
-            $type_field = get_option('scq_ticket_type_field', 'category');
-            $statuses = get_option('scq_non_closed_statuses', array());
-
-            if (empty($type_field) || empty($statuses) || !isset($ticket->id)) {
-                return str_replace('{{queue_count}}', '0', $str);
-            }
-
-            // Whitelist the type field to prevent SQL injection
-            $custom_fields_table = $this->custom_fields_table_name;
-            $custom_field_slugs = $wpdb->get_col("SELECT slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
-            $default_fields = array('category', 'priority', 'status');
-            $allowed_fields = array_merge($default_fields, $custom_field_slugs ? $custom_field_slugs : array());
-
-            if (!in_array($type_field, $allowed_fields, true)) {
-                return str_replace('{{queue_count}}', '0', $str);
-            }
-
-            $table = $wpdb->prefix . $this->table_name;
-
-            // Get the ticket type value directly from the database
-            $type_value = $wpdb->get_var($wpdb->prepare("SELECT `{$type_field}` FROM `{$table}` WHERE id = %d", $ticket->id));
-
-            if (is_null($type_value)) {
-                return str_replace('{{queue_count}}', '0', $str);
-            }
-
-            $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
-
-            // Exclude the current ticket from the count
-            $sql = $wpdb->prepare(
-                "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders) AND `id` <> %d",
-                array_merge(array($type_value), $statuses, array($ticket->id))
-            );
-            $count = $wpdb->get_var($sql);
-
-            $str = str_replace('{{queue_count}}', $count, $str);
-        }
-        return $str;
     }
     public function test_queues_ajax_handler() {
         check_ajax_referer('scq_test_queues_nonce', 'nonce');
@@ -304,6 +279,52 @@ class SupportCandyQueues {
         }
 
         wp_send_json_success($results);
+    }
+    public function update_queue_count_field($ticket) {
+        global $wpdb;
+
+        $placeholder_slug = 'scq_queue_count';
+        $type_field = get_option('scq_ticket_type_field', 'category');
+        $statuses = get_option('scq_non_closed_statuses', array());
+
+        if (empty($type_field) || empty($statuses) || !isset($ticket->id)) {
+            return;
+        }
+
+        // Whitelist the type field to prevent SQL injection
+        $custom_fields_table = $this->custom_fields_table_name;
+        $custom_field_slugs = $wpdb->get_col("SELECT slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
+        $default_fields = array('category', 'priority', 'status');
+        $allowed_fields = array_merge($default_fields, $custom_field_slugs ? $custom_field_slugs : array());
+
+        if (!in_array($type_field, $allowed_fields, true)) {
+            return;
+        }
+
+        $table = $wpdb->prefix . $this->table_name;
+
+        // Get the ticket type value directly from the database
+        $type_value = $wpdb->get_var($wpdb->prepare("SELECT `{$type_field}` FROM `{$table}` WHERE id = %d", $ticket->id));
+
+        if (is_null($type_value)) {
+            return;
+        }
+
+        // Calculate the queue count
+        $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
+        $sql = $wpdb->prepare(
+            "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders) AND `id` <> %d",
+            array_merge(array($type_value), $statuses, array($ticket->id))
+        );
+        $count = $wpdb->get_var($sql);
+
+        // Update the placeholder field for the new ticket
+        $update_sql = $wpdb->prepare(
+            "UPDATE `{$table}` SET `{$placeholder_slug}` = %s WHERE id = %d",
+            $count,
+            $ticket->id
+        );
+        $wpdb->query($update_sql);
     }
 }
 
