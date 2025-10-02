@@ -1,0 +1,17 @@
+.dual-list {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.dual-list select {
+    width: 150px;
+    height: 150px;
+}
+.dual-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.dual-buttons button {
+    width: 50px;
+}
