@@ -14,7 +14,7 @@ class SupportCandyQueues {
 
     private $table_name = 'psmsc_tickets'; // SupportCandy's ticket table name
     private $status_table_name = 'psmsc_statuses'; // SupportCandy's status table name
-    private $custom_fields_table_name = 'psmsc_custom_fields'; // SupportCandy's custom fields table
+    private $custom_fields_table_name = 'wpya_psmsc_custom_fields'; // SupportCandy's custom fields table
 
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -144,7 +144,7 @@ class SupportCandyQueues {
                 <h2><?php _e( 'Ticket Type Field', 'supportcandy-queues' ); ?></h2>
                 <?php
                 // Get custom fields from SupportCandy's custom fields table
-                $custom_fields_table = $wpdb->prefix . $this->custom_fields_table_name;
+                $custom_fields_table = $this->custom_fields_table_name;
                 $custom_fields = $wpdb->get_results("SELECT name, field_key FROM {$custom_fields_table}");
 
                 // Add default fields that can also be used
@@ -220,7 +220,7 @@ class SupportCandyQueues {
         $statuses = get_option('scq_non_closed_statuses', array(1, 2));
 
         // Whitelist of allowed fields to prevent SQL injection.
-        $custom_fields_table = $wpdb->prefix . $this->custom_fields_table_name;
+        $custom_fields_table = $this->custom_fields_table_name;
         $custom_field_keys = $wpdb->get_col("SELECT field_key FROM {$custom_fields_table}");
         $default_fields = array('category', 'priority', 'status');
         $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
@@ -265,7 +265,7 @@ class SupportCandyQueues {
         }
 
         // Whitelist the type field to prevent SQL injection
-        $custom_fields_table = $wpdb->prefix . $this->custom_fields_table_name;
+        $custom_fields_table = $this->custom_fields_table_name;
         $custom_field_keys = $wpdb->get_col("SELECT field_key FROM {$custom_fields_table}");
         $default_fields = array('category', 'priority', 'status');
         $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
