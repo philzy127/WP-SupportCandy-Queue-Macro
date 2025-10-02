@@ -1,0 +1,2 @@
+# WP-SupportCandy-Queue-Macro
+
