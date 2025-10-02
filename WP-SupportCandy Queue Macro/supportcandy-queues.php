@@ -22,7 +22,7 @@ class SupportCandyQueues {
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
         add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
-        add_action( 'wpsc_register_email_macros', array( $this, 'register_queue_macro' ) );
+        add_filter( 'wpsc_register_email_macros', array( $this, 'register_queue_macro' ) );
         add_filter( 'wpsc_replace_email_macros', array( $this, 'replace_queue_macro' ), 10, 3 );
         register_activation_hook( __FILE__, array( $this, 'set_default_options' ) );
         register_uninstall_hook( __FILE__, array( 'SupportCandyQueues', 'uninstall' ) );
