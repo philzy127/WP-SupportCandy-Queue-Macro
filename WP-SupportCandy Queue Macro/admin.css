@@ -2,7 +2,6 @@
 .dual-list-container {
     display: flex;
     gap: 20px;
-    align-items: center;
 }
 
 .dual-list-box {
@@ -30,6 +29,7 @@
     flex-direction: column;
     gap: 10px;
     align-items: center;
+    justify-content: center;
 }
 
 .dual-buttons button {
