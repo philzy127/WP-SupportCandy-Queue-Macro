@@ -15,6 +15,9 @@ class SupportCandyQueues {
     private $table_name = 'psmsc_tickets'; // SupportCandy's ticket table name
     private $status_table_name = 'psmsc_statuses'; // SupportCandy's status table name
     private $custom_fields_table_name = 'wpya_psmsc_custom_fields'; // SupportCandy's custom fields table
+    private $options_table_name = 'wpya_psmsc_options'; // SupportCandy's options table
+    private $priorities_table_name = 'psmsc_priorities'; // SupportCandy's priorities table
+    private $categories_table_name = 'psmsc_categories'; // SupportCandy's categories table
 
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -155,6 +158,11 @@ class SupportCandyQueues {
                 );
 
                 $all_type_fields = array_merge($default_fields, $custom_fields ? $custom_fields : array());
+
+                // Sort the merged list alphabetically by name
+                usort($all_type_fields, function($a, $b) {
+                    return strcmp($a->name, $b->name);
+                });
                 ?>
                 <select name="scq_ticket_type_field">
                     <?php
@@ -275,10 +283,48 @@ class SupportCandyQueues {
             return;
         }
 
-        $table = $wpdb->prefix . $this->table_name;
+        // Create a map of all possible IDs to their names
+        $id_to_name_map = array();
 
-        // Get all unique values for the selected ticket type field
-        $type_values = $wpdb->get_col($wpdb->prepare("SELECT DISTINCT %i FROM {$table}", $type_field));
+        // 1. Custom field options
+        $options_table = $this->options_table_name;
+        $options = $wpdb->get_results("SELECT id, name FROM {$options_table}");
+        if ($options) {
+            foreach ($options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        // 2. Statuses
+        $status_table = $wpdb->prefix . $this->status_table_name;
+        $status_options = $wpdb->get_results("SELECT id, name FROM {$status_table}");
+        if ($status_options) {
+            foreach ($status_options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        // 3. Priorities
+        $priorities_table = $wpdb->prefix . $this->priorities_table_name;
+        $priority_options = $wpdb->get_results("SELECT id, name FROM {$priorities_table}");
+        if ($priority_options) {
+            foreach ($priority_options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        // 4. Categories
+        $categories_table = $wpdb->prefix . $this->categories_table_name;
+        $category_options = $wpdb->get_results("SELECT id, name FROM {$categories_table}");
+        if ($category_options) {
+            foreach ($category_options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        $table = $wpdb->prefix . $this->table_name;
+        $type_values_query = "SELECT DISTINCT `{$type_field}` FROM `{$table}`";
+        $type_values = $wpdb->get_col($type_values_query);
 
         $results = array();
         $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
@@ -289,7 +335,8 @@ class SupportCandyQueues {
                 array_merge(array($type_value), $statuses)
             );
             $count = $wpdb->get_var($sql);
-            $results[$type_value] = $count;
+            $name = isset($id_to_name_map[$type_value]) ? $id_to_name_map[$type_value] : $type_value;
+            $results[$name] = $count;
         }
 
         wp_send_json_success($results);
