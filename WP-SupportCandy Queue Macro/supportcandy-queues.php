@@ -145,13 +145,13 @@ class SupportCandyQueues {
                 <?php
                 // Get custom fields from SupportCandy's custom fields table
                 $custom_fields_table = $this->custom_fields_table_name;
-                $custom_fields = $wpdb->get_results("SELECT name, field_key FROM {$custom_fields_table}");
+                $custom_fields = $wpdb->get_results("SELECT name, slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
 
                 // Add default fields that can also be used
                 $default_fields = array(
-                    (object) array('field_key' => 'category', 'name' => __('Category', 'supportcandy-queues')),
-                    (object) array('field_key' => 'priority', 'name' => __('Priority', 'supportcandy-queues')),
-                    (object) array('field_key' => 'status', 'name' => __('Status', 'supportcandy-queues')),
+                    (object) array('slug' => 'category', 'name' => __('Category', 'supportcandy-queues')),
+                    (object) array('slug' => 'priority', 'name' => __('Priority', 'supportcandy-queues')),
+                    (object) array('slug' => 'status', 'name' => __('Status', 'supportcandy-queues')),
                 );
 
                 $all_type_fields = array_merge($default_fields, $custom_fields ? $custom_fields : array());
@@ -159,7 +159,7 @@ class SupportCandyQueues {
                 <select name="scq_ticket_type_field">
                     <?php
                     foreach ($all_type_fields as $field) {
-                        echo '<option value="' . esc_attr($field->field_key) . '" ' . selected($type_field, $field->field_key, false) . '>' . esc_html($field->name) . '</option>';
+                        echo '<option value="' . esc_attr($field->slug) . '" ' . selected($type_field, $field->slug, false) . '>' . esc_html($field->name) . '</option>';
                     }
                     ?>
                 </select>
@@ -221,7 +221,7 @@ class SupportCandyQueues {
 
         // Whitelist of allowed fields to prevent SQL injection.
         $custom_fields_table = $this->custom_fields_table_name;
-        $custom_field_keys = $wpdb->get_col("SELECT field_key FROM {$custom_fields_table}");
+        $custom_field_keys = $wpdb->get_col("SELECT slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
         $default_fields = array('category', 'priority', 'status');
         $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
 
@@ -266,7 +266,7 @@ class SupportCandyQueues {
 
         // Whitelist the type field to prevent SQL injection
         $custom_fields_table = $this->custom_fields_table_name;
-        $custom_field_keys = $wpdb->get_col("SELECT field_key FROM {$custom_fields_table}");
+        $custom_field_keys = $wpdb->get_col("SELECT slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
         $default_fields = array('category', 'priority', 'status');
         $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
 
