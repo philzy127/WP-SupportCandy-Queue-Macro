@@ -27,7 +27,7 @@ class SupportCandyQueues {
 
         // Correct hooks for adding and replacing macros
         add_filter( 'wpsc_macros', array( $this, 'register_macro' ) );
-        add_filter( 'wpsc_replace_macros', array( $this, 'replace_macro' ), 10, 3 );
+        add_filter( 'wpsc_replace_macros', array( $this, 'replace_macro' ), 99, 3 );
 
         add_action( 'wp_ajax_scq_test_queues', array( $this, 'test_queues_ajax_handler' ) );
     }
