@@ -58,6 +58,10 @@ class SupportCandyQueues {
         if (strpos($hook, 'scq_main') !== false) {
             wp_enqueue_script('scq-admin-js', plugin_dir_url(__FILE__) . 'admin.js', array('jquery'), null, true);
             wp_enqueue_style('scq-admin-css', plugin_dir_url(__FILE__) . 'admin.css');
+            wp_localize_script('scq-admin-js', 'scq_ajax', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce'    => wp_create_nonce('scq_test_queues_nonce')
+            ));
         }
     }
 
