@@ -203,17 +203,20 @@ class SupportCandyQueues {
         error_log('SCQ Macro: Type Field: ' . $type_field);
         error_log('SCQ Macro: Statuses: ' . print_r($statuses, true));
 
-        if ( empty( $type_field ) || empty( $statuses ) || ! isset( $thread ) || ! isset( $thread->{$type_field} ) ) {
-            error_log('SCQ Macro: Aborting - missing type field, statuses, or thread property.');
+        // First, check if the settings are valid.
+        if ( empty( $type_field ) || empty( $statuses ) || ! isset( $thread ) ) {
+            error_log('SCQ Macro: Aborting - missing type field, statuses, or thread object itself.');
             $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
             return $data;
         }
 
+        // Get the value directly from the thread object. It may be null if not set.
         $type_value = $thread->{$type_field};
-        error_log('SCQ Macro: Type Value: ' . $type_value);
+        error_log('SCQ Macro: Type Value: ' . print_r($type_value, true));
 
-        if ( is_null( $type_value ) ) {
-            error_log('SCQ Macro: Aborting - type value is null.');
+        // Now, check if the retrieved value is valid.
+        if ( is_null( $type_value ) || $type_value === '' ) {
+            error_log('SCQ Macro: Aborting - type value is null or empty.');
             $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
             return $data;
         }
