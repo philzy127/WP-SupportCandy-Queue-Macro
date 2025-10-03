@@ -185,49 +185,49 @@ class SupportCandyQueues {
         if ($macro === 'queue_count') {
             global $wpdb;
 
+            // Detailed logging
+            error_log('SCQ Macro: replace_macro triggered.');
+            error_log('SCQ Macro: Ticket object: ' . print_r($ticket, true));
+
             $type_field = get_option('scq_ticket_type_field', 'category');
             $statuses = get_option('scq_non_closed_statuses', array());
 
-            // Use the ticket object directly, checking if the type field is set
-            if (empty($type_field) || empty($statuses) || !isset($ticket) || !isset($ticket->{$type_field})) {
+            error_log('SCQ Macro: Type Field: ' . $type_field);
+            error_log('SCQ Macro: Statuses: ' . print_r($statuses, true));
+
+            if (empty($type_field) || empty($statuses) || !isset($ticket) || !property_exists($ticket, $type_field)) {
+                error_log('SCQ Macro: Aborting - missing type field, statuses, or ticket property.');
                 return str_replace('{{queue_count}}', '0', $str);
             }
 
-            // Whitelist the type field to prevent SQL injection
-            $custom_fields_table = $this->custom_fields_table_name;
-            $custom_field_slugs = $wpdb->get_col("SELECT slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
-            $default_fields = array('category', 'priority', 'status');
-            $allowed_fields = array_merge($default_fields, $custom_field_slugs ? $custom_field_slugs : array());
-
-            if (!in_array($type_field, $allowed_fields, true)) {
-                return str_replace('{{queue_count}}', '0', $str);
-            }
-
-            // Get the ticket type value from the ticket object
             $type_value = $ticket->{$type_field};
+            error_log('SCQ Macro: Type Value: ' . $type_value);
 
             if (is_null($type_value)) {
+                error_log('SCQ Macro: Aborting - type value is null.');
                 return str_replace('{{queue_count}}', '0', $str);
             }
 
             $table = $wpdb->prefix . $this->table_name;
             $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
 
-            // Base query for counting tickets in the queue
             $sql = $wpdb->prepare(
                 "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders)",
                 array_merge(array($type_value), $statuses)
             );
-            $count = (int) $wpdb->get_var($sql);
+            error_log('SCQ Macro: SQL Query: ' . $sql);
 
-            // For new ticket notifications, the ticket is not yet in the database.
-            // We can detect this by checking if the ticket ID is set. If not, we add 1 to the count.
-            // SupportCandy might not have assigned an ID at this point.
+            $count = (int) $wpdb->get_var($sql);
+            error_log('SCQ Macro: Initial Count from DB: ' . $count);
+
+            // Adjust count for new tickets not yet in the database
             if ( ! isset( $ticket->id ) || ! $ticket->id ) {
                 $count++;
+                error_log('SCQ Macro: New ticket detected. Incremented count to: ' . $count);
             }
 
             $str = str_replace('{{queue_count}}', $count, $str);
+            error_log('SCQ Macro: Final Count: ' . $count);
         }
         return $str;
     }
