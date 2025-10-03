@@ -1,5 +1,4 @@
 <?php
-error_log('SCQ Plugin file is being loaded.');
 /**
  * Plugin Name: SupportCandy Queues
  * Description: Adds a real-time queue count macro to SupportCandy emails with configurable non-closed statuses.
@@ -204,7 +203,7 @@ class SupportCandyQueues {
         error_log('SCQ Macro: Type Field: ' . $type_field);
         error_log('SCQ Macro: Statuses: ' . print_r($statuses, true));
 
-        if ( empty( $type_field ) || empty( $statuses ) || ! isset( $thread ) || ! property_exists( $thread, $type_field ) ) {
+        if ( empty( $type_field ) || empty( $statuses ) || ! isset( $thread ) || ! isset( $thread->{$type_field} ) ) {
             error_log('SCQ Macro: Aborting - missing type field, statuses, or thread property.');
             $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
             return $data;
