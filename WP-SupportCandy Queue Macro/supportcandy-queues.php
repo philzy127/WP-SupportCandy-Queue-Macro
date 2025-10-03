@@ -194,8 +194,7 @@ class SupportCandyQueues {
         global $wpdb;
 
         error_log('SCQ Macro: replace_queue_count_in_email triggered.');
-        error_log('SCQ Macro: Thread object: ' . print_r($thread, true));
-        error_log('SCQ Macro: Original Data: ' . print_r($data, true));
+        error_log('SCQ Macro: POST data: ' . print_r($_POST, true));
 
         $type_field = get_option('scq_ticket_type_field', 'category');
         $statuses = get_option('scq_non_closed_statuses', array());
@@ -204,19 +203,23 @@ class SupportCandyQueues {
         error_log('SCQ Macro: Statuses: ' . print_r($statuses, true));
 
         // First, check if the settings are valid.
-        if ( empty( $type_field ) || empty( $statuses ) || ! isset( $thread ) ) {
-            error_log('SCQ Macro: Aborting - missing type field, statuses, or thread object itself.');
+        if ( empty( $type_field ) || empty( $statuses ) ) {
+            error_log('SCQ Macro: Aborting - missing type field or statuses in settings.');
             $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
             return $data;
         }
 
-        // Get the value directly from the thread object. It may be null if not set.
-        $type_value = $thread->{$type_field};
-        error_log('SCQ Macro: Type Value: ' . print_r($type_value, true));
+        // Get the value from $_POST, as the thread object is not yet populated.
+        $type_value = '';
+        if ( isset( $_POST[ $type_field ] ) ) {
+            // Sanitize the input before using it.
+            $type_value = sanitize_text_field( wp_unslash( $_POST[ $type_field ] ) );
+        }
+        error_log('SCQ Macro: Type Value from $_POST: ' . print_r($type_value, true));
 
         // Now, check if the retrieved value is valid.
         if ( is_null( $type_value ) || $type_value === '' ) {
-            error_log('SCQ Macro: Aborting - type value is null or empty.');
+            error_log('SCQ Macro: Aborting - type value from $_POST is null or empty.');
             $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
             return $data;
         }
