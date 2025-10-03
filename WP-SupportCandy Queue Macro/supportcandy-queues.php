@@ -1,4 +1,5 @@
 <?php
+error_log('SCQ Plugin file is being loaded.');
 /**
  * Plugin Name: SupportCandy Queues
  * Description: Adds a real-time queue count macro to SupportCandy emails with configurable non-closed statuses.
