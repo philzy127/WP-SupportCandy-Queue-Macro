@@ -234,11 +234,7 @@ class SupportCandyQueues {
         error_log('SCQ Macro: SQL Query: ' . $sql);
 
         $count = (int) $wpdb->get_var($sql);
-        error_log('SCQ Macro: Initial Count from DB: ' . $count);
-
-        // The new ticket is not yet in the database when this hook runs, so we add 1.
-        $count++;
-        error_log('SCQ Macro: Incremented count for the new ticket to: ' . $count);
+        error_log('SCQ Macro: Final Count from DB: ' . $count);
 
         $data['body'] = str_replace('{{queue_count}}', $count, $data['body']);
         error_log('SCQ Macro: Final Body: ' . $data['body']);
