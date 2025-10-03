@@ -13,6 +13,9 @@ class SupportCandyQueues {
     private $table_name = 'psmsc_tickets';
     private $status_table_name = 'psmsc_statuses';
     private $custom_fields_table_name = 'wpya_psmsc_custom_fields';
+    private $options_table_name = 'wpya_psmsc_options';
+    private $priorities_table_name = 'psmsc_priorities';
+    private $categories_table_name = 'psmsc_categories';
 
     public function __construct() {
         add_action( 'init', array( $this, 'load_textdomain' ) );
@@ -25,6 +28,8 @@ class SupportCandyQueues {
         // Correct hooks for adding and replacing macros
         add_filter( 'wpsc_macros', array( $this, 'register_macro' ) );
         add_filter( 'wpsc_replace_macros', array( $this, 'replace_macro' ), 10, 3 );
+
+        add_action( 'wp_ajax_scq_test_queues', array( $this, 'test_queues_ajax_handler' ) );
     }
 
     public function load_textdomain() {
@@ -144,6 +149,16 @@ class SupportCandyQueues {
                 <p><?php _e('The field in the ticket table that represents ticket type.', 'supportcandy-queues'); ?></p>
 
                 <p><input type="submit" name="scq_save" class="button button-primary" value="<?php esc_attr_e('Save Settings', 'supportcandy-queues'); ?>" /></p>
+
+                <h2><?php _e( 'Test Queue Counts', 'supportcandy-queues' ); ?></h2>
+                <p><?php _e( 'Click the button to see the current queue counts based on your saved settings.', 'supportcandy-queues' ); ?></p>
+                <p>
+                    <button type="button" id="scq_test_button" class="button"><?php _e( 'Run Test', 'supportcandy-queues' ); ?></button>
+                </p>
+                <div id="scq_test_results" style="display:none; border: 1px solid #ddd; padding: 10px; margin-top: 10px;">
+                    <h3><?php _e( 'Test Results', 'supportcandy-queues' ); ?></h3>
+                    <div id="scq_test_results_content"></div>
+                </div>
             </form>
         </div>
         <?php
@@ -204,6 +219,87 @@ class SupportCandyQueues {
             $str = str_replace('{{queue_count}}', $count, $str);
         }
         return $str;
+    }
+    public function test_queues_ajax_handler() {
+        check_ajax_referer('scq_test_queues_nonce', 'nonce');
+
+        global $wpdb;
+        $type_field = get_option('scq_ticket_type_field', 'category');
+        $statuses = get_option('scq_non_closed_statuses', array());
+
+        if (empty($statuses)) {
+            wp_send_json_error(__('No non-closed statuses are configured.', 'supportcandy-queues'));
+            return;
+        }
+
+        // Whitelist the type field to prevent SQL injection
+        $custom_fields_table = $this->custom_fields_table_name;
+        $custom_field_keys = $wpdb->get_col("SELECT slug FROM {$custom_fields_table} WHERE `field` = 'ticket'");
+        $default_fields = array('category', 'priority', 'status');
+        $allowed_fields = array_merge($default_fields, $custom_field_keys ? $custom_field_keys : array());
+
+        if ( ! in_array( $type_field, $allowed_fields, true ) ) {
+            wp_send_json_error(sprintf(__('Invalid ticket type field: %s', 'supportcandy-queues'), $type_field));
+            return;
+        }
+
+        // Create a map of all possible IDs to their names
+        $id_to_name_map = array();
+
+        // Custom field options
+        $options_table = $this->options_table_name;
+        $options = $wpdb->get_results("SELECT id, name FROM {$options_table}");
+        if ($options) {
+            foreach ($options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        // Statuses
+        $status_table = $wpdb->prefix . $this->status_table_name;
+        $status_options = $wpdb->get_results("SELECT id, name FROM {$status_table}");
+        if ($status_options) {
+            foreach ($status_options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        // Priorities
+        $priorities_table = $wpdb->prefix . $this->priorities_table_name;
+        $priority_options = $wpdb->get_results("SELECT id, name FROM {$priorities_table}");
+        if ($priority_options) {
+            foreach ($priority_options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        // Categories
+        $categories_table = $wpdb->prefix . $this->categories_table_name;
+        $category_options = $wpdb->get_results("SELECT id, name FROM {$categories_table}");
+        if ($category_options) {
+            foreach ($category_options as $option) {
+                $id_to_name_map[$option->id] = $option->name;
+            }
+        }
+
+        $table = $wpdb->prefix . $this->table_name;
+        $type_values_query = "SELECT DISTINCT `{$type_field}` FROM `{$table}`";
+        $type_values = $wpdb->get_col($type_values_query);
+
+        $results = array();
+        $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
+
+        foreach ($type_values as $type_value) {
+            $sql = $wpdb->prepare(
+                "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders)",
+                array_merge(array($type_value), $statuses)
+            );
+            $count = $wpdb->get_var($sql);
+            $name = isset($id_to_name_map[$type_value]) ? $id_to_name_map[$type_value] : $type_value;
+            $results[$name] = $count;
+        }
+
+        wp_send_json_success($results);
     }
 }
 
