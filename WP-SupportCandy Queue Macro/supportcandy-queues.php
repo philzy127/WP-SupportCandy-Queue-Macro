@@ -188,7 +188,8 @@ class SupportCandyQueues {
             $type_field = get_option('scq_ticket_type_field', 'category');
             $statuses = get_option('scq_non_closed_statuses', array());
 
-            if (empty($type_field) || empty($statuses) || !isset($ticket->id)) {
+            // Use the ticket object directly, checking if the type field is set
+            if (empty($type_field) || empty($statuses) || !isset($ticket) || !isset($ticket->{$type_field})) {
                 return str_replace('{{queue_count}}', '0', $str);
             }
 
@@ -202,23 +203,29 @@ class SupportCandyQueues {
                 return str_replace('{{queue_count}}', '0', $str);
             }
 
-            $table = $wpdb->prefix . $this->table_name;
-
-            // Get the ticket type value directly from the database
-            $type_value = $wpdb->get_var($wpdb->prepare("SELECT `{$type_field}` FROM `{$table}` WHERE id = %d", $ticket->id));
+            // Get the ticket type value from the ticket object
+            $type_value = $ticket->{$type_field};
 
             if (is_null($type_value)) {
                 return str_replace('{{queue_count}}', '0', $str);
             }
 
+            $table = $wpdb->prefix . $this->table_name;
             $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
 
-            // Exclude the current ticket from the count
+            // Base query for counting tickets in the queue
             $sql = $wpdb->prepare(
-                "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders) AND `id` <> %d",
-                array_merge(array($type_value), $statuses, array($ticket->id))
+                "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders)",
+                array_merge(array($type_value), $statuses)
             );
-            $count = $wpdb->get_var($sql);
+            $count = (int) $wpdb->get_var($sql);
+
+            // For new ticket notifications, the ticket is not yet in the database.
+            // We can detect this by checking if the ticket ID is set. If not, we add 1 to the count.
+            // SupportCandy might not have assigned an ID at this point.
+            if ( ! isset( $ticket->id ) || ! $ticket->id ) {
+                $count++;
+            }
 
             $str = str_replace('{{queue_count}}', $count, $str);
         }
