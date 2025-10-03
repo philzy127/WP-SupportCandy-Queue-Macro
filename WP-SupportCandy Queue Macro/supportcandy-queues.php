@@ -27,7 +27,7 @@ class SupportCandyQueues {
 
         // Correct hooks for adding and replacing macros
         add_filter( 'wpsc_macros', array( $this, 'register_macro' ) );
-        add_filter( 'wpsc_replace_macros', array( $this, 'replace_macro' ), 99, 3 );
+        add_filter( 'wpsc_create_ticket_email_data', array( $this, 'replace_queue_count_in_email' ), 10, 2 );
 
         add_action( 'wp_ajax_scq_test_queues', array( $this, 'test_queues_ajax_handler' ) );
     }
@@ -179,57 +179,65 @@ class SupportCandyQueues {
     }
 
     /**
-     * Replace custom macro tags with their values.
+     * Replace the queue count macro in the new ticket email.
+     *
+     * @param array $data Email data.
+     * @param object $thread Ticket thread object.
+     * @return array Modified email data.
      */
-    public function replace_macro($str, $ticket, $macro) {
-        if ($macro === 'queue_count') {
-            global $wpdb;
-
-            // Detailed logging
-            error_log('SCQ Macro: replace_macro triggered.');
-            error_log('SCQ Macro: Ticket object: ' . print_r($ticket, true));
-
-            $type_field = get_option('scq_ticket_type_field', 'category');
-            $statuses = get_option('scq_non_closed_statuses', array());
-
-            error_log('SCQ Macro: Type Field: ' . $type_field);
-            error_log('SCQ Macro: Statuses: ' . print_r($statuses, true));
-
-            if (empty($type_field) || empty($statuses) || !isset($ticket) || !property_exists($ticket, $type_field)) {
-                error_log('SCQ Macro: Aborting - missing type field, statuses, or ticket property.');
-                return str_replace('{{queue_count}}', '0', $str);
-            }
-
-            $type_value = $ticket->{$type_field};
-            error_log('SCQ Macro: Type Value: ' . $type_value);
-
-            if (is_null($type_value)) {
-                error_log('SCQ Macro: Aborting - type value is null.');
-                return str_replace('{{queue_count}}', '0', $str);
-            }
-
-            $table = $wpdb->prefix . $this->table_name;
-            $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
-
-            $sql = $wpdb->prepare(
-                "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders)",
-                array_merge(array($type_value), $statuses)
-            );
-            error_log('SCQ Macro: SQL Query: ' . $sql);
-
-            $count = (int) $wpdb->get_var($sql);
-            error_log('SCQ Macro: Initial Count from DB: ' . $count);
-
-            // Adjust count for new tickets not yet in the database
-            if ( ! isset( $ticket->id ) || ! $ticket->id ) {
-                $count++;
-                error_log('SCQ Macro: New ticket detected. Incremented count to: ' . $count);
-            }
-
-            $str = str_replace('{{queue_count}}', $count, $str);
-            error_log('SCQ Macro: Final Count: ' . $count);
+    public function replace_queue_count_in_email( $data, $thread ) {
+        // Check if our macro is in the email body. If not, do nothing.
+        if ( strpos( $data['body'], '{{queue_count}}' ) === false ) {
+            return $data;
         }
-        return $str;
+
+        global $wpdb;
+
+        error_log('SCQ Macro: replace_queue_count_in_email triggered.');
+        error_log('SCQ Macro: Thread object: ' . print_r($thread, true));
+        error_log('SCQ Macro: Original Data: ' . print_r($data, true));
+
+        $type_field = get_option('scq_ticket_type_field', 'category');
+        $statuses = get_option('scq_non_closed_statuses', array());
+
+        error_log('SCQ Macro: Type Field: ' . $type_field);
+        error_log('SCQ Macro: Statuses: ' . print_r($statuses, true));
+
+        if ( empty( $type_field ) || empty( $statuses ) || ! isset( $thread ) || ! property_exists( $thread, $type_field ) ) {
+            error_log('SCQ Macro: Aborting - missing type field, statuses, or thread property.');
+            $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
+            return $data;
+        }
+
+        $type_value = $thread->{$type_field};
+        error_log('SCQ Macro: Type Value: ' . $type_value);
+
+        if ( is_null( $type_value ) ) {
+            error_log('SCQ Macro: Aborting - type value is null.');
+            $data['body'] = str_replace('{{queue_count}}', '0', $data['body']);
+            return $data;
+        }
+
+        $table = $wpdb->prefix . $this->table_name;
+        $placeholders = implode(',', array_fill(0, count($statuses), '%d'));
+
+        $sql = $wpdb->prepare(
+            "SELECT COUNT(*) FROM `{$table}` WHERE `{$type_field}` = %s AND `status` IN ($placeholders)",
+            array_merge(array($type_value), $statuses)
+        );
+        error_log('SCQ Macro: SQL Query: ' . $sql);
+
+        $count = (int) $wpdb->get_var($sql);
+        error_log('SCQ Macro: Initial Count from DB: ' . $count);
+
+        // The new ticket is not yet in the database when this hook runs, so we add 1.
+        $count++;
+        error_log('SCQ Macro: Incremented count for the new ticket to: ' . $count);
+
+        $data['body'] = str_replace('{{queue_count}}', $count, $data['body']);
+        error_log('SCQ Macro: Final Body: ' . $data['body']);
+
+        return $data;
     }
     public function test_queues_ajax_handler() {
         check_ajax_referer('scq_test_queues_nonce', 'nonce');
